@@ -19,18 +19,37 @@ async function fetchEvolutionChain(speciesUrl) {
   try {
     const speciesRes = await fetch(speciesUrl);
     const speciesData = await speciesRes.json();
+    if (!speciesData.evolution_chain?.url) {
+      return [];
+    }
     const evoRes = await fetch(speciesData.evolution_chain.url);
     const evoData = await evoRes.json();
     // Parse evolution chain
     const chain = [];
     let evo = evoData.chain;
     while (evo) {
-      chain.push(evo.species.name);
-      if (evo.evolves_to && evo.evolves_to.length > 0) {
-        evo = evo.evolves_to[0];
-      } else {
-        evo = null;
+      const evolutionDetails = evo.evolution_details?.[0];
+      let evolutionMethod = 'Level up';
+
+      if (evolutionDetails) {
+        if (evolutionDetails.min_level) {
+          evolutionMethod = `Level ${evolutionDetails.min_level}`;
+        } else if (evolutionDetails.trigger?.name === 'trade') {
+          evolutionMethod = 'Trade';
+        } else if (evolutionDetails.item) {
+          evolutionMethod = `Use ${evolutionDetails.item.name}`;
+        } else if (evolutionDetails.min_happiness) {
+          evolutionMethod = 'Happiness';
+        }
       }
+
+      chain.push({
+        name: evo.species.name,
+        min_level: evolutionDetails?.min_level ?? null,
+        evolution_method: evolutionMethod
+      });
+
+      evo = evo.evolves_to?.[0] ?? null;
     }
     return chain;
   } catch (err) {
@@ -53,17 +72,18 @@ export default class User extends Component {
     evolution: [],
     evolutionImages: [],
     loadingEvolution: true,
+    showAllMoves: false,
   };
 
   async componentDidMount() {
     const { pokemon } = this.props.route.params;
     if (pokemon.species && pokemon.species.url) {
-      const evolutionNames = await fetchEvolutionChain(pokemon.species.url);
+      const evolution_chain = await fetchEvolutionChain(pokemon.species.url);
       const evolutionImages = await Promise.all(
-        evolutionNames.map(async (name) => await fetchPokemonImage(name))
+        evolution_chain.map(async (evo) => await fetchPokemonImage(evo.name))
       );
       this.setState({
-        evolution: evolutionNames,
+        evolution: evolution_chain,
         evolutionImages,
         loadingEvolution: false,
       });
@@ -75,7 +95,7 @@ export default class User extends Component {
   render() {
     const { route } = this.props;
     const { pokemon } = route.params;
-    const { evolution, evolutionImages, loadingEvolution } = this.state;
+    const { evolution, evolutionImages, loadingEvolution, showAllMoves } = this.state;
 
     const abilities = pokemon.abilities
       ? pokemon.abilities.map(a => a.ability.name).join(', ')
@@ -83,9 +103,58 @@ export default class User extends Component {
     const stats = pokemon.stats
       ? pokemon.stats.map(s => `${s.stat.name.toUpperCase()}: ${s.base_stat}`).join(' | ')
       : 'N/A';
-    const moves = pokemon.moves
-      ? pokemon.moves.slice(0, 5).map(m => m.move.name).join(', ')
-      : 'N/A';
+    const allMoves = pokemon.moves
+      ? pokemon.moves
+        .map(m => {
+          const details = m.version_group_details;
+          const latestDetail = details[details.length - 1];
+          const learnMethod = latestDetail?.move_learn_method?.name;
+          const level = latestDetail?.level_learned_at;
+
+          let method = '';
+          let priority = 5;
+
+          switch (learnMethod) {
+            case 'level-up':
+              method = level ? ` (Lv ${level})` : ' (Level up)';
+              priority = 2;
+              break;
+            case 'egg':
+              method = ' (Egg)';
+              priority = 1;
+              break;
+            case 'tutor':
+              method = ' (Tutor)';
+              priority = 3;
+              break;
+            case 'machine':
+              method = ' (TM/HM)';
+              priority = 4;
+              break;
+            case 'trade':
+              method = ' (Trade)';
+              priority = 6;
+              break;
+            default:
+              method = learnMethod ? ` (${learnMethod})` : '';
+              priority = 5;
+          }
+
+          return {
+            name: m.move.name,
+            method,
+            priority,
+            level: level || 0
+          };
+        })
+        .sort((a, b) => {
+          if (a.priority !== b.priority) return a.priority - b.priority;
+          if (a.priority === 2) return a.level - b.level;
+          return a.name.localeCompare(b.name);
+        })
+        .map(m => `${m.name}${m.method}`)
+      : [];
+    const movesToDisplay = showAllMoves ? allMoves : allMoves.slice(0, 5);
     const spriteList = pokemon.sprites
       ? Object.values(pokemon.sprites).filter(v => typeof v === 'string' && v)
       : [];
@@ -103,16 +172,17 @@ export default class User extends Component {
             {loadingEvolution ? (
               <ActivityIndicator color="#d90429" size="large" />
             ) : evolution.length > 0 ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
-                {evolution.map((name, idx) => (
-                  <React.Fragment key={name}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                {evolution.map((evo, idx) => (
+                  <React.Fragment key={evo.name}>
                     <View style={{ alignItems: 'center', marginHorizontal: 10 }}>
                       <AvatarPerfil source={{ uri: evolutionImages[idx] }} style={{ width: 60, height: 60, marginBottom: 4, borderRadius: 30 }} />
-                      <BioPerfil style={{ color: '#d90429', fontSize: 14 }}>{name.toUpperCase()}</BioPerfil>
+                      <BioPerfil style={{ color: '#d90429', fontSize: 14, textAlign: 'center' }}>{evo.name.toUpperCase()}</BioPerfil>
+                      {idx < evolution.length - 1 && evolution[idx + 1].evolution_method && (
+                        <BioPerfil style={{ fontSize: 12, color: '#555' }}>{evolution[idx + 1].evolution_method}</BioPerfil>
+                      )}
                     </View>
-                    {idx < evolution.length - 1 && (
-                      <BioPerfil style={{ color: '#d90429', fontSize: 24, marginHorizontal: 2, marginBottom: 0, marginTop: 0, alignSelf: 'center' }}>→</BioPerfil>
-                    )}
+                    {idx < evolution.length - 1 && (<BioPerfil style={{ color: '#d90429', fontSize: 24, marginHorizontal: 2 }}>→</BioPerfil>)}
                   </React.Fragment>
                 ))}
               </View>
@@ -135,8 +205,26 @@ export default class User extends Component {
             <BioPerfil>{stats}</BioPerfil>
           </Card>
 
-          <Card title="Movimentos (5 primeiros)">
-            <BioPerfil>{moves}</BioPerfil>
+          <Card title="Movimentos">
+            {allMoves.length > 0 ? (
+              <View>
+                {movesToDisplay.map((move, idx) => (
+                  <BioPerfil key={idx} style={{ marginBottom: 4 }}>
+                    {move}
+                  </BioPerfil>
+                ))}
+                {allMoves.length > 5 && (
+                  <BioPerfil
+                    onPress={() => this.setState({ showAllMoves: !showAllMoves })}
+                    style={{ color: '#d90429', marginTop: 8 }}
+                  >
+                    {showAllMoves ? 'Ver menos ▲' : 'Ver todos ▼'}
+                  </BioPerfil>
+                )}
+              </View>
+            ) : (
+              <BioPerfil>N/A</BioPerfil>
+            )}
           </Card>
 
           {spriteList.length > 1 && (
