@@ -204,6 +204,8 @@ Os componentes seguem um padrão com **JSDoc** para facilitar manutenção:
 Este projeto está licenciado sob a licença **MIT**.  
 Sinta-se livre para usar, modificar e compartilhar.
 
-👨‍💻 Criado por:
+---
 
-Gustavo Schizari Ferreira Filho e Maria Clara Cardoso Costa
+## 👨‍💻 Criado por:
+
+**Gustavo Schizari Ferreira Filho** e **Maria Clara Cardoso Costa**
