@@ -80,7 +80,6 @@ Aplicativo desenvolvido em **React Native (Expo)** que consome a [PokeAPI](https
 - [Node.js LTS](https://nodejs.org/)  
 - [Git](https://git-scm.com/)  
 - [Expo CLI](https://docs.expo.dev/get-started/installation/)  
-- Emulador Android/iOS ou aplicativo **Expo Go** no celular
 
 ---
 
