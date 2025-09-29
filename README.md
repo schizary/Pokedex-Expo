@@ -85,7 +85,7 @@ Aplicativo desenvolvido em **React Native (Expo)** que consome a [PokeAPI](https
 
 ### 📥 **1. Clonar o repositório**
 ```bash
-git clone https://github.com/SEU_USUARIO/Pokedex-Expo.git
+git clone https://github.com/schizary/Pokedex-Expo.git
 cd Pokedex-Expo
 ```
 
